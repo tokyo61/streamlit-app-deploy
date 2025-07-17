@@ -154,8 +154,8 @@ def get_vectorizer_and_matrix(all_texts):
     tfidf_matrix = vectorizer.fit_transform([item["text"] for item in all_texts])
     return vectorizer, tfidf_matrix
 
-# タイトルの代わりにバナー画像を表示
-st.image("tool.jpg", use_column_width=True)
+# タイトルの代わりにバナー画像を表示（use_container_width推奨）
+st.image("tool.jpg", use_container_width=True)
 
 query = st.text_input("気になるキーワード・文章を入力してください:")
 
