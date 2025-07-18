@@ -159,35 +159,29 @@ st.image("tool.jpg", use_container_width=True)
 
 query = st.text_input("気になるキーワード・文章を入力してください:")
 
-# TF-IDF前に空チェック
-with st.spinner("読み込み中です...（立ち上げ時は特に時間がかかります しばしお待ちを）"):
-    all_texts = load_all_texts()
-    if not all_texts:
-        st.error("文章が抽出できませんでした。PDFの内容や分割方法を確認してください。")
-        st.stop()
-    vectorizer, tfidf_matrix = get_vectorizer_and_matrix(all_texts)
-
-# 検索部分
 if st.button("検索"):
-    if query:
+    with st.spinner("PDFを読み込み中です...（初回は時間がかかります）"):
+        all_texts = load_all_texts()  # ←ここで初回のみダウンロード＆キャッシュ
         if not all_texts:
-            st.warning("検索対象の文章がありません。PDFの読み込みに失敗している可能性があります。")
-        else:
-            texts_only = [item["text"] for item in all_texts]
-            query_vec = vectorizer.transform([query])
-            cosine_sim = cosine_similarity(query_vec, tfidf_matrix)
-            top_indices = cosine_sim[0].argsort()[::-1]
-            st.subheader("関連性の高い文章（上位10件＋後の文章）")
-            shown = set()
-            count = 0
-            for idx in top_indices:
-                text = texts_only[idx]
-                url = all_texts[idx]["url"]
-                if text not in shown:
-                    # 後の文章のみ取得
-                    after = texts_only[idx + 1] if idx < len(texts_only) - 1 else ""
-                    st.markdown(f" {text} {after}[元URL]({url})")
-                    shown.add(text)
-                    count += 1
-                if count >= 10:
-                    break
+            st.error("文章が抽出できませんでした。PDFの内容や分割方法を確認してください。")
+            st.stop()
+        vectorizer, tfidf_matrix = get_vectorizer_and_matrix(all_texts)
+
+    if query:
+        texts_only = [item["text"] for item in all_texts]
+        query_vec = vectorizer.transform([query])
+        cosine_sim = cosine_similarity(query_vec, tfidf_matrix)
+        top_indices = cosine_sim[0].argsort()[::-1]
+        st.subheader("関連性の高い文章（上位10件＋後の文章）")
+        shown = set()
+        count = 0
+        for idx in top_indices:
+            text = texts_only[idx]
+            url = all_texts[idx]["url"]
+            if text not in shown:
+                after = texts_only[idx + 1] if idx < len(texts_only) - 1 else ""
+                st.markdown(f" {text} {after}[元URL]({url})")
+                shown.add(text)
+                count += 1
+            if count >= 10:
+                break
