@@ -175,43 +175,41 @@ if st.button("検索"):
         n = len(all_texts) // 20
         all_texts_parts = [all_texts[i*n:(i+1)*n] if i < 19 else all_texts[i*n:] for i in range(20)]
 
-        # tfidf_matrixを20分割で読み込み
-        tfidf_matrices = []
-        for i in range(20):
-            with open(f"tfidf_matrix{i+1}.pkl", "rb") as f:
-                tfidf_matrices.append(pickle.load(f))
-
         # vectorizerを読み込み
         with open("vectorizer.pkl", "rb") as f:
             vectorizer = pickle.load(f)
 
-    if query:
-        texts_only = [item["text"] for item in all_texts]
-        query_vec = vectorizer.transform([query])
+        # クエリベクトルを作成
+        if query:
+            query_vec = vectorizer.transform([query])
 
-        results = []
-        for i, (tfidf_matrix, texts_part) in enumerate(zip(tfidf_matrices, all_texts_parts)):
-            cosine_sim = cosine_similarity(query_vec, tfidf_matrix)
-            for idx in range(len(texts_part)):
-                global_idx = i * n + idx
-                score = cosine_sim[0][idx]
-                results.append((global_idx, score))
+            results = []
+            for i in range(20):
+                with open(f"tfidf_matrix{i+1}.pkl", "rb") as f:
+                    tfidf_matrix = pickle.load(f)
+                texts_part = all_texts_parts[i]
+                cosine_sim = cosine_similarity(query_vec, tfidf_matrix)
+                for idx in range(len(texts_part)):
+                    global_idx = i * n + idx
+                    score = cosine_sim[0][idx]
+                    results.append((global_idx, score))
 
-        # スコア順にまとめて上位10件
-        results = sorted(results, key=lambda x: x[1], reverse=True)
-        shown = set()
-        count = 0
-        st.subheader("関連性の高い文章（上位10件＋後の文章）")
-        for global_idx, score in results:
-            text = texts_only[global_idx]
-            url = all_texts[global_idx]["url"]
-            if text not in shown:
-                after = texts_only[global_idx + 1] if global_idx < len(texts_only) - 1 else ""
-                st.markdown(f" {text} {after}[元URL]({url})")
-                shown.add(text)
-                count += 1
-            if count >= 10:
-                break
+            # スコア順にまとめて上位10件
+            results = sorted(results, key=lambda x: x[1], reverse=True)
+            shown = set()
+            count = 0
+            texts_only = [item["text"] for item in all_texts]
+            st.subheader("関連性の高い文章（上位10件＋後の文章）")
+            for global_idx, score in results:
+                text = texts_only[global_idx]
+                url = all_texts[global_idx]["url"]
+                if text not in shown:
+                    after = texts_only[global_idx + 1] if global_idx < len(texts_only) - 1 else ""
+                    st.markdown(f" {text} {after}[元URL]({url})")
+                    shown.add(text)
+                    count += 1
+                if count >= 10:
+                    break
 
 # 事前処理用（1回だけ実行）
 # import pandas as pd
