@@ -5,6 +5,8 @@ import os
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 import re
+import pandas as pd
+import pickle
 
 urls = [
     "https://www.moj.go.jp/content/000006427.pdf",
@@ -157,31 +159,81 @@ def get_vectorizer_and_matrix(all_texts):
 # タイトルの代わりにバナー画像を表示（use_container_width推奨）
 st.image("tool.jpg", use_container_width=True)
 
-query = st.text_input("気になるキーワード・文章を入力してください:")
+query = st.text_input("気になるキーワード・文章を入力してください。表示に少し時間がかかります。:")
 
+# 検索ボタンが押されたとき
 if st.button("検索"):
-    with st.spinner("PDFを読み込み中です...（初回は時間がかかります）"):
-        all_texts = load_all_texts()  # ←ここで初回のみダウンロード＆キャッシュ
-        if not all_texts:
-            st.error("文章が抽出できませんでした。PDFの内容や分割方法を確認してください。")
-            st.stop()
-        vectorizer, tfidf_matrix = get_vectorizer_and_matrix(all_texts)
+    with st.spinner("データを読み込み中です..."):
+        # all_textsを2分割で読み込み
+        df1 = pd.read_csv("all_texts_part1.csv")
+        df2 = pd.read_csv("all_texts_part2.csv")
+        all_texts1 = df1.to_dict(orient="records")
+        all_texts2 = df2.to_dict(orient="records")
+        all_texts = all_texts1 + all_texts2
+
+        # all_textsを20分割
+        n = len(all_texts) // 20
+        all_texts_parts = [all_texts[i*n:(i+1)*n] if i < 19 else all_texts[i*n:] for i in range(20)]
+
+        # tfidf_matrixを20分割で読み込み
+        tfidf_matrices = []
+        for i in range(20):
+            with open(f"tfidf_matrix{i+1}.pkl", "rb") as f:
+                tfidf_matrices.append(pickle.load(f))
+
+        # vectorizerを読み込み
+        with open("vectorizer.pkl", "rb") as f:
+            vectorizer = pickle.load(f)
 
     if query:
         texts_only = [item["text"] for item in all_texts]
         query_vec = vectorizer.transform([query])
-        cosine_sim = cosine_similarity(query_vec, tfidf_matrix)
-        top_indices = cosine_sim[0].argsort()[::-1]
-        st.subheader("関連性の高い文章（上位10件＋後の文章）")
+
+        results = []
+        for i, (tfidf_matrix, texts_part) in enumerate(zip(tfidf_matrices, all_texts_parts)):
+            cosine_sim = cosine_similarity(query_vec, tfidf_matrix)
+            for idx in range(len(texts_part)):
+                global_idx = i * n + idx
+                score = cosine_sim[0][idx]
+                results.append((global_idx, score))
+
+        # スコア順にまとめて上位10件
+        results = sorted(results, key=lambda x: x[1], reverse=True)
         shown = set()
         count = 0
-        for idx in top_indices:
-            text = texts_only[idx]
-            url = all_texts[idx]["url"]
+        st.subheader("関連性の高い文章（上位10件＋後の文章）")
+        for global_idx, score in results:
+            text = texts_only[global_idx]
+            url = all_texts[global_idx]["url"]
             if text not in shown:
-                after = texts_only[idx + 1] if idx < len(texts_only) - 1 else ""
+                after = texts_only[global_idx + 1] if global_idx < len(texts_only) - 1 else ""
                 st.markdown(f" {text} {after}[元URL]({url})")
                 shown.add(text)
                 count += 1
             if count >= 10:
                 break
+
+# 事前処理用（1回だけ実行）
+# import pandas as pd
+# import pickle
+
+# all_texts = load_all_texts()  # 必ず定義する
+# vectorizer, tfidf_matrix = get_vectorizer_and_matrix(all_texts)
+
+# all_textsをCSVで保存し、2分割
+# df = pd.DataFrame(all_texts)
+# n = len(df) // 2
+# df.iloc[:n].to_csv("all_texts_part1.csv", index=False, encoding="utf-8-sig")
+# df.iloc[n:].to_csv("all_texts_part2.csv", index=False, encoding="utf-8-sig")
+
+# tfidf_matrixを20分割で保存
+# m = tfidf_matrix.shape[0] // 20
+# for i in range(20):
+#    start = i * m
+#    end = (i + 1) * m if i < 19 else tfidf_matrix.shape[0]
+#    with open(f"tfidf_matrix{i+1}.pkl", "wb") as f:
+#        pickle.dump(tfidf_matrix[start:end], f)
+
+# vectorizerも保存
+# with open("vectorizer.pkl", "wb") as f:
+#    pickle.dump(vectorizer, f)
